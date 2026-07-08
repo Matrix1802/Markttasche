@@ -579,10 +579,25 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
 
 // ── Root ──────────────────────────────────────────────────────
 export default function App() {
-  const [session,setSession]=useState<Session|null>(null)
-  const [screen,setScreen]=useState<Screen>('home')
-  const enter=(s:Session)=>{setSession(s);setScreen('app')}
-  const leave=()=>{setSession(null);setScreen('home')}
+  // Session aus localStorage wiederherstellen (bleibt nach Neuladen erhalten)
+  const [session,setSession]=useState<Session|null>(()=>{
+    try {
+      const saved = localStorage.getItem('mt_session')
+      return saved ? JSON.parse(saved) as Session : null
+    } catch { return null }
+  })
+  const [screen,setScreen]=useState<Screen>(()=>{
+    try { return localStorage.getItem('mt_session') ? 'app' : 'home' } catch { return 'home' }
+  })
+
+  const enter=(s:Session)=>{
+    try { localStorage.setItem('mt_session', JSON.stringify(s)) } catch {}
+    setSession(s); setScreen('app')
+  }
+  const leave=()=>{
+    try { localStorage.removeItem('mt_session') } catch {}
+    setSession(null); setScreen('home')
+  }
   const handleLoad=async(list:SavedList)=>{
     if(!session) return
     try{await fbLoadTemplate(session.code,list,session.name,session.color);setScreen('app')}catch(e){console.error(e)}
