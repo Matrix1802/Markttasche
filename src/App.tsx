@@ -128,7 +128,18 @@ function GlobalStyle() {
   useEffect(()=>{
     if(document.getElementById('mt-css')) return
     const s=document.createElement('style'); s.id='mt-css'
-    s.textContent=`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body,#root{height:100%;font-family:'Inter',system-ui,sans-serif;background:#f9fafb;-webkit-font-smoothing:antialiased}input,button,select{font-family:inherit}button{cursor:pointer}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}@keyframes mtSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`
+    s.textContent=`*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}html,body,#root{height:100%;font-family:'Inter',system-ui,sans-serif;background:#f9fafb;-webkit-font-smoothing:antialiased}input,button,select{font-family:inherit}button{cursor:pointer}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}@keyframes mtSlide{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+    .mt-hdr{display:flex;align-items:center;gap:10px}
+    .mt-hdr-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+    .mt-hdr-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+    .mt-title{font-size:17px;font-weight:800;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mt-stats{display:flex;align-items:center;gap:10px;background:#f9fafb;border-radius:10px;padding:6px 14px;border:1px solid #e5e7eb;flex-shrink:0}
+    @media(max-width:600px){
+      .mt-hdr{flex-wrap:wrap}
+      .mt-title{font-size:16px}
+      .mt-hdr-icon{font-size:22px !important}
+      .mt-stats{order:3;width:100%;justify-content:center;margin-top:4px}
+    }`
     document.head.appendChild(s)
   },[])
   return null
@@ -153,7 +164,7 @@ const S: Record<string,CSSProperties> = {
   ftTag:    {background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:20,padding:'5px 12px',fontSize:12,fontWeight:600},
   wrap:     {minHeight:'100vh',display:'flex',flexDirection:'column',maxWidth:700,margin:'0 auto',background:'#f9fafb'},
   toast:    {position:'fixed',top:18,left:'50%',transform:'translateX(-50%)',background:'#111827',color:'#fff',padding:'10px 22px',borderRadius:100,fontSize:14,fontWeight:600,zIndex:999,whiteSpace:'nowrap',boxShadow:'0 4px 20px rgba(0,0,0,.25)',animation:'mtSlide .2s ease',pointerEvents:'none'},
-  hdr:      {background:'#fff',borderBottom:'1px solid #e5e7eb',padding:'14px 20px',display:'flex',alignItems:'center',gap:10,position:'sticky',top:0,zIndex:10,boxShadow:'0 1px 4px rgba(0,0,0,.06)'},
+  hdr:      {background:'#fff',borderBottom:'1px solid #e5e7eb',padding:'12px 14px',position:'sticky',top:0,zIndex:10,boxShadow:'0 1px 4px rgba(0,0,0,.06)'},
   hLeft:    {display:'flex',alignItems:'center',gap:12,flex:1,minWidth:0},
   hTitle:   {fontSize:17,fontWeight:800,color:'#111827'},
   hSub:     {display:'flex',alignItems:'center',gap:10,marginTop:2},
@@ -481,19 +492,27 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
       {toast&&<div style={S.toast}>{toast}</div>}
       {showSave&&<SaveModal count={items.length} onSave={async(t,d)=>{await fbSaveList(rc,items,t,d);setShowSave(false);msg('✅ Liste gespeichert!')}} onClose={()=>setShowSave(false)}/>}
       <header style={S.hdr}>
-        <div style={S.hLeft}>
-          <span style={{fontSize:26}}>🛒</span>
-          <div><div style={S.hTitle}>Markttasche</div>
-            <div style={S.hSub}><span style={S.chip}>{rc}</span><span style={S.uBadge}><span style={{...S.uDot,background:uColor}}/>{uName}</span></div>
+        <div className="mt-hdr">
+          <div className="mt-hdr-left">
+            <span className="mt-hdr-icon" style={{fontSize:26,flexShrink:0}}>🛒</span>
+            <div style={{minWidth:0}}>
+              <div className="mt-title">Markttasche</div>
+              <div style={S.hSub}>
+                <span style={S.chip}>{rc}</span>
+                <span style={S.uBadge}><span style={{...S.uDot,background:uColor}}/>{uName}</span>
+              </div>
+            </div>
+          </div>
+          <div className="mt-stats">
+            <div style={S.stI}><span style={S.stN}>{openN}</span><span style={S.stL}>offen</span></div>
+            <div style={S.stDiv}/>
+            <div style={S.stI}><span style={S.stNG}>{doneN}</span><span style={S.stL}>erledigt</span></div>
+          </div>
+          <div className="mt-hdr-actions">
+            <button style={S.hBtn} onClick={onHistory} title="Gespeicherte Listen">📋</button>
+            <button style={S.hBtn} onClick={onLeave} title="Raum verlassen">←</button>
           </div>
         </div>
-        <div style={S.stats}>
-          <div style={S.stI}><span style={S.stN}>{openN}</span><span style={S.stL}>offen</span></div>
-          <div style={S.stDiv}/>
-          <div style={S.stI}><span style={S.stNG}>{doneN}</span><span style={S.stL}>erledigt</span></div>
-        </div>
-        <button style={S.hBtn} onClick={onHistory} title="Gespeicherte Listen">📋</button>
-        <button style={S.hBtn} onClick={onLeave}>← Verlassen</button>
       </header>
 
       <div style={S.addBar}>
@@ -513,7 +532,7 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
             </div>
             🤖 KI {aiOn?'ein':'aus'}
           </label>
-          {items.length>0&&<button style={S.saveBtn} onClick={()=>setShowSave(true)}>💾 Liste speichern</button>}
+          {items.length>0&&<button style={S.saveBtn} onClick={()=>setShowSave(true)}>💾 Speichern</button>}
         </div>
       </div>
 
