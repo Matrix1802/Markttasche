@@ -527,8 +527,8 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
   // ── Export als JSON-Datei ──
   const exportJSON=()=>{
     if(items.length===0){msg('Liste ist leer');return}
-    const data={ exported:new Date().toISOString(), room:rc,
-      items:items.map(i=>({name:i.name,qty:i.qty,category:i.category,done:i.done})) }
+    // Nur die Artikel (Name + Menge), keine Kategorien/Status/Raum
+    const data={ items: items.map(i=>({ name:i.name, qty:i.qty })) }
     const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'})
     const url=URL.createObjectURL(blob)
     const a=document.createElement('a')
@@ -538,23 +538,42 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
   }
 
   // ── Import aus JSON-Datei ──
+  // Akzeptiert:  ["Milch","Nudeln"]  ODER  [{"name":"Milch","qty":"2"}]
+  //              ODER  {"items":[ ... gleiche Formate ... ]}
   const importJSON=async(e:ChangeEvent<HTMLInputElement>)=>{
     const file=e.target.files?.[0]; if(!file) return
     try {
       const text=await file.text()
-      const data=JSON.parse(text)
-      const imported=(data.items||[]) as {name:string;qty?:string;category?:CatKey;done?:boolean}[]
-      if(imported.length===0){msg('Keine Artikel in Datei');return}
+      const parsed=JSON.parse(text)
+      // Array direkt, oder unter "items" verschachtelt
+      const raw:unknown[] = Array.isArray(parsed) ? parsed : (parsed.items || [])
+      if(!Array.isArray(raw) || raw.length===0){ msg('Keine Artikel in Datei'); return }
+
+      // Jeden Eintrag zu {name, qty} normalisieren
+      const entries = raw.map(r => {
+        if (typeof r === 'string') return { name: r.trim(), qty: '1' }
+        if (r && typeof r === 'object') {
+          const o = r as { name?:string; qty?:string|number }
+          return { name: (o.name||'').toString().trim(), qty: (o.qty!=null?o.qty:'1').toString() }
+        }
+        return { name: '', qty: '1' }
+      }).filter(e => e.name.length > 0)
+
+      if(entries.length===0){ msg('Keine gültigen Artikel gefunden'); return }
+
+      // Kategorie automatisch bestimmen (KI falls aktiv, sonst lokal) und speichern
       const batch=writeBatch(db)
-      imported.forEach((it,i)=>{
-        const cat=(it.category && CATS[it.category])?it.category:catLocal(it.name)
+      let idx=0
+      for(const entry of entries){
+        const category = aiOn ? await catAI(entry.name) : catLocal(entry.name)
         batch.set(doc(collection(db,'rooms',rc,'items')),{
-          name:it.name, qty:it.qty||'1', category:cat, done:it.done||false,
-          added_by:uName, added_color:uColor, done_by:null, created_at:Date.now()+i
+          name: entry.name, qty: entry.qty || '1', category, done:false,
+          added_by:uName, added_color:uColor, done_by:null, created_at:Date.now()+idx
         })
-      })
+        idx++
+      }
       await batch.commit()
-      msg(`✅ ${imported.length} Artikel importiert`)
+      msg(`✅ ${entries.length} Artikel importiert & kategorisiert`)
     } catch(err){ msg('Fehler beim Import: '+(err as Error).message) }
     finally { if(fileRef.current) fileRef.current.value='' }
   }
