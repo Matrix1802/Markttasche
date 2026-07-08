@@ -12,7 +12,7 @@ import { db } from './firebase'
 type CatKey =
   | 'obst_gemuese' | 'fleisch_fisch' | 'milch' | 'backwaren'
   | 'tiefkuehl' | 'getraenke' | 'snacks' | 'haushalt'
-  | 'koerperpflege' | 'gewuerze' | 'konserven' | 'sonstiges'
+  | 'koerperpflege' | 'gewuerze' | 'teigwaren' | 'konserven' | 'sonstiges'
 interface CatCfg { label: string; emoji: string; color: string; bg: string }
 interface Item {
   id: string; name: string; qty: string; category: CatKey
@@ -37,7 +37,8 @@ const CATS: Record<CatKey, CatCfg> = {
   haushalt:      { label:'Haushalt',           emoji:'🧹', color:'#0f766e', bg:'#ccfbf1' },
   koerperpflege: { label:'Körperpflege',       emoji:'🧴', color:'#6d28d9', bg:'#ede9fe' },
   gewuerze:      { label:'Gewürze & Öl',      emoji:'🧂', color:'#b45309', bg:'#fef9c3' },
-  konserven:     { label:'Konserven & Pasta',  emoji:'🥫', color:'#1d4ed8', bg:'#dbeafe' },
+  teigwaren:     { label:'Teigwaren',           emoji:'🍝', color:'#c2410c', bg:'#ffedd5' },
+  konserven:     { label:'Konserven',           emoji:'🥫', color:'#1d4ed8', bg:'#dbeafe' },
   sonstiges:     { label:'Sonstiges',          emoji:'🛒', color:'#6b7280', bg:'#f3f4f6' },
 }
 const CAT_KEYS = Object.keys(CATS) as CatKey[]
@@ -53,7 +54,8 @@ const KEYWORDS: Partial<Record<CatKey, string[]>> = {
   haushalt:      ['spülmittel','waschmittel','putzmittel','schwamm','müllbeutel','küchenrolle','toilettenpapier','taschentuch','alufolie','backpapier','reiniger','weichspüler'],
   koerperpflege: ['shampoo','duschgel','deo','zahnpasta','zahnbürste','rasierer','creme','lotion','parfüm','wattestäbchen'],
   gewuerze:      ['salz','pfeffer','paprikapulver','curry','zimt','zucker','öl','olivenöl','essig','senf','ketchup','mayonnaise','sojasauce','chili','oregano','thymian','rosmarin','kurkuma','ingwer','vanille','honig'],
-  konserven:     ['nudeln','pasta','spaghetti','reis','linsen','kichererbsen','mais','tomatenmark','dosentomaten','suppe','brühe'],
+  teigwaren:     ['nudeln','pasta','spaghetti','makkaroni','penne','fusilli','tagliatelle','tortellini','ravioli','gnocchi','lasagne','spätzle','reis','couscous','bulgur','risotto'],
+  konserven:     ['linsen','kichererbsen','mais','tomatenmark','dosentomaten','suppe','brühe','bohnen','erbsen','thunfischdose'],
 }
 const USER_COLORS = ['#0ea5e9','#f59e0b','#ec4899','#10b981','#8b5cf6','#ef4444','#06b6d4','#84cc16']
 
