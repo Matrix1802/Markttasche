@@ -187,7 +187,9 @@ const S: Record<string,CSSProperties> = {
   aiLbl:    {display:'flex',alignItems:'center',gap:8,fontSize:12,color:'#6b7280',fontWeight:600,cursor:'pointer',userSelect:'none'},
   trk:      {width:34,height:20,borderRadius:10,position:'relative',cursor:'pointer',flexShrink:0},
   thumb:    {position:'absolute',top:2,width:16,height:16,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 4px rgba(0,0,0,.2)',transition:'left .15s'},
-  saveBtn:  {marginLeft:'auto',padding:'7px 12px',background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:8,fontSize:12,fontWeight:700},
+  saveBtn:  {padding:'7px 12px',background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:8,fontSize:12,fontWeight:700,whiteSpace:'nowrap'},
+  toolBtns: {display:'flex',alignItems:'center',gap:6,marginLeft:'auto'},
+  toolBtn:  {padding:'7px 10px',background:'#fff',color:'#374151',border:'1px solid #e5e7eb',borderRadius:8,fontSize:14,fontWeight:600,lineHeight:'1'},
   fBar:     {background:'#fff',padding:'8px 16px 10px',borderBottom:'1px solid #f0f0f0',display:'flex',flexDirection:'column',gap:6},
   fScroll:  {display:'flex',gap:6,overflowX:'auto',paddingBottom:2},
   fChip:    {padding:'5px 12px',borderRadius:20,border:'none',fontSize:12,whiteSpace:'nowrap',fontWeight:500,background:'#f3f4f6',color:'#374151'},
@@ -465,6 +467,7 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
   const [aiOn,setAiOn]=useState(true); const [adding,setAdding]=useState(false)
   const [toast,setToast]=useState(''); const [showSave,setShowSave]=useState(false)
   const ref=useRef<HTMLInputElement>(null)
+  const fileRef=useRef<HTMLInputElement>(null)
   const msg=(t:string)=>{setToast(t);setTimeout(()=>setToast(''),2600)}
 
   useEffect(()=>{ const u=subscribeItems(rc,i=>{setItems(i);setLoading(false)}); return ()=>u() },[rc])
@@ -476,6 +479,82 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
       await fbAddItem(rc,{name,qty:inpQty||'1',category,done:false,added_by:uName,added_color:uColor,done_by:null,created_at:Date.now()})
       setInpName(''); setInpQty('1'); ref.current?.focus(); msg(`„${name}" hinzugefügt`)
     } catch(e){msg('Fehler: '+(e as Error).message)} finally{setAdding(false)}
+  }
+
+  // ── Export als PDF (über Druckdialog → "Als PDF speichern") ──
+  const exportPDF=()=>{
+    if(items.length===0){msg('Liste ist leer');return}
+    const byCat:Record<string,Item[]>={}
+    for(const it of items){ if(!byCat[it.category])byCat[it.category]=[]; byCat[it.category].push(it) }
+    const today=new Date().toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric'})
+    let rows=''
+    for(const cat of Object.keys(byCat)){
+      const cfg=CATS[cat as CatKey]??CATS.sonstiges
+      rows+=`<tr><td colspan="3" style="padding:14px 8px 6px;font-weight:700;font-size:14px;color:${cfg.color};border-bottom:2px solid ${cfg.color}">${cfg.emoji} ${cfg.label}</td></tr>`
+      for(const it of byCat[cat]){
+        rows+=`<tr style="border-bottom:1px solid #eee">
+          <td style="padding:8px;width:28px;text-align:center;font-size:16px">${it.done?'☑':'☐'}</td>
+          <td style="padding:8px;font-size:14px;${it.done?'text-decoration:line-through;color:#999':''}">${it.name}</td>
+          <td style="padding:8px;text-align:right;font-size:13px;font-weight:600;color:${cfg.color};white-space:nowrap">${it.qty}</td>
+        </tr>`
+      }
+    }
+    const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Einkaufsliste ${today}</title>
+      <style>
+        @page{margin:1.5cm}
+        body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#111;max-width:600px;margin:0 auto;padding:20px}
+        .head{display:flex;align-items:center;gap:12px;border-bottom:3px solid #16a34a;padding-bottom:14px;margin-bottom:6px}
+        .logo{font-size:34px}
+        h1{font-size:24px;margin:0}
+        .meta{font-size:13px;color:#666;margin:4px 0 16px}
+        table{width:100%;border-collapse:collapse}
+        .foot{margin-top:24px;padding-top:12px;border-top:1px solid #ddd;font-size:11px;color:#999;text-align:center}
+      </style></head><body>
+      <div class="head"><span class="logo">🛒</span><h1>Einkaufsliste</h1></div>
+      <div class="meta">📅 ${today} &nbsp;·&nbsp; Raum ${rc} &nbsp;·&nbsp; ${items.length} Artikel &nbsp;·&nbsp; ${openN} offen</div>
+      <table>${rows}</table>
+      <div class="foot">Erstellt mit Markttasche</div>
+      </body></html>`
+    const w=window.open('','_blank')
+    if(!w){msg('Bitte Pop-ups erlauben');return}
+    w.document.write(html); w.document.close()
+    setTimeout(()=>{ w.focus(); w.print() },400)
+    msg('📄 PDF-Export geöffnet')
+  }
+
+  // ── Export als JSON-Datei ──
+  const exportJSON=()=>{
+    if(items.length===0){msg('Liste ist leer');return}
+    const data={ exported:new Date().toISOString(), room:rc,
+      items:items.map(i=>({name:i.name,qty:i.qty,category:i.category,done:i.done})) }
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'})
+    const url=URL.createObjectURL(blob)
+    const a=document.createElement('a')
+    a.href=url; a.download=`einkaufsliste-${rc}.json`; a.click()
+    URL.revokeObjectURL(url)
+    msg('💾 JSON exportiert')
+  }
+
+  // ── Import aus JSON-Datei ──
+  const importJSON=async(e:ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0]; if(!file) return
+    try {
+      const text=await file.text()
+      const data=JSON.parse(text)
+      const imported=(data.items||[]) as {name:string;qty?:string;category?:CatKey;done?:boolean}[]
+      if(imported.length===0){msg('Keine Artikel in Datei');return}
+      const batch=writeBatch(db)
+      imported.forEach((it,i)=>{
+        const cat=(it.category && CATS[it.category])?it.category:catLocal(it.name)
+        batch.set(doc(collection(db,'rooms',rc,'items')),{
+          name:it.name, qty:it.qty||'1', category:cat, done:it.done||false,
+          added_by:uName, added_color:uColor, done_by:null, created_at:Date.now()+i
+        })
+      })
+      await batch.commit()
+      msg(`✅ ${imported.length} Artikel importiert`)
+    } catch(err){ msg('Fehler beim Import: '+(err as Error).message) }
+    finally { if(fileRef.current) fileRef.current.value='' }
   }
 
   const filtered=items.filter(i=>(fCat==='all'||i.category===fCat)&&(fDone==='all'||(fDone==='open'&&!i.done)||(fDone==='done'&&i.done)))
@@ -532,7 +611,13 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
             </div>
             🤖 KI {aiOn?'ein':'aus'}
           </label>
-          {items.length>0&&<button style={S.saveBtn} onClick={()=>setShowSave(true)}>💾 Speichern</button>}
+          <div style={S.toolBtns}>
+            <button style={S.toolBtn} onClick={()=>fileRef.current?.click()} title="Aus Datei importieren">📥</button>
+            {items.length>0&&<button style={S.toolBtn} onClick={exportJSON} title="Als Datei exportieren">💾</button>}
+            {items.length>0&&<button style={S.toolBtn} onClick={exportPDF} title="Als PDF exportieren">📄</button>}
+            {items.length>0&&<button style={S.saveBtn} onClick={()=>setShowSave(true)}>📋 Merken</button>}
+          </div>
+          <input ref={fileRef} type="file" accept="application/json,.json" style={{display:'none'}} onChange={importJSON} />
         </div>
       </div>
 
