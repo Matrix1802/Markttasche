@@ -19,7 +19,7 @@ interface Item {
   done: boolean; added_by: string; added_color: string
   done_by: string | null; created_at: number
 }
-interface SavedList { id: string; title: string; date: string; item_count: number; items: SavedItem[]; created_at: number }
+interface SavedList { id: string; title: string; date: string; item_count: number; items: SavedItem[]; created_at: number; from_room?: string }
 interface SavedItem { name: string; qty: string; category: CatKey }
 interface Session { code: string; name: string; color: string }
 type Screen = 'home' | 'app' | 'history'
@@ -99,8 +99,10 @@ function subscribeItems(code: string, cb: (i:Item[])=>void) {
   return onSnapshot(query(collection(db,'rooms',code,'items'),orderBy('created_at','asc')),
     s=>cb(s.docs.map(d=>({id:d.id,...d.data()} as Item))), e=>console.error(e))
 }
-function subscribeSavedLists(code: string, cb: (l:SavedList[])=>void) {
-  return onSnapshot(query(collection(db,'rooms',code,'saved_lists'),orderBy('created_at','desc')),
+// Gespeicherte Listen sind GLOBAL (nicht an einen Raum gebunden)
+// → in jedem Raum verfügbar
+function subscribeSavedLists(_code: string, cb: (l:SavedList[])=>void) {
+  return onSnapshot(query(collection(db,'saved_lists'),orderBy('created_at','desc')),
     s=>cb(s.docs.map(d=>({id:d.id,...d.data()} as SavedList))), e=>console.error(e))
 }
 const fbAddItem    = (rc:string, data:Omit<Item,'id'>) => addDoc(collection(db,'rooms',rc,'items'), data)
@@ -108,11 +110,12 @@ const fbToggle     = (rc:string, id:string, done:boolean, by:string) => updateDo
 const fbDelete     = (rc:string, id:string) => deleteDoc(doc(db,'rooms',rc,'items',id))
 const fbClearDone  = (rc:string, items:Item[]) => Promise.all(items.filter(i=>i.done).map(i=>deleteDoc(doc(db,'rooms',rc,'items',i.id))))
 const fbUpdateItem = (rc:string, id:string, fields:Partial<Item>) => updateDoc(doc(db,'rooms',rc,'items',id), fields)
-const fbDelSaved   = (rc:string, id:string) => deleteDoc(doc(db,'rooms',rc,'saved_lists',id))
+const fbDelSaved   = (_rc:string, id:string) => deleteDoc(doc(db,'saved_lists',id))
 
 async function fbSaveList(rc:string, items:Item[], title:string, date:string) {
-  await addDoc(collection(db,'rooms',rc,'saved_lists'), {
-    title, date, item_count:items.length, created_at:Date.now(),
+  // In globale Sammlung speichern, Raum-Code nur als Info mitspeichern
+  await addDoc(collection(db,'saved_lists'), {
+    title, date, item_count:items.length, created_at:Date.now(), from_room:rc,
     items: items.map(i=>({name:i.name,qty:i.qty,category:i.category}))
   })
 }
@@ -465,7 +468,7 @@ function HistoryScreen({ session, onBack, onLoad }: { session:Session; onBack:()
       {toast&&<div style={S.toast}>{toast}</div>}
       <div style={S.histHdr}>
         <button style={S.hBtn} onClick={onBack}>← Zurück</button>
-        <div style={{flex:1}}><div style={S.hTitle}>📋 Gespeicherte Listen</div><div style={{fontSize:12,color:'#6b7280'}}>Raum: {session.code}</div></div>
+        <div style={{flex:1}}><div style={S.hTitle}>📋 Gespeicherte Listen</div><div style={{fontSize:12,color:'#6b7280'}}>In jedem Raum verfügbar</div></div>
       </div>
       <div style={S.histBody}>
         {loading&&<div style={S.spinner}>⏳ Lade Listen…</div>}
