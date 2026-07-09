@@ -219,6 +219,9 @@ const S: Record<string,CSSProperties> = {
   mDot:     {width:7,height:7,borderRadius:'50%',flexShrink:0},
   iRight:   {display:'flex',alignItems:'center',gap:8,flexShrink:0},
   qtyBadge: {border:'1.5px solid',borderRadius:8,padding:'2px 10px',fontSize:13,fontWeight:700,minWidth:32,textAlign:'center',cursor:'pointer'},
+  stepper:  {display:'flex',alignItems:'center',gap:2,background:'#f9fafb',border:'1px solid #e5e7eb',borderRadius:10,padding:2},
+  stepBtn:  {width:26,height:26,borderRadius:7,background:'#fff',border:'1px solid #e5e7eb',color:'#374151',fontSize:17,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1',flexShrink:0},
+  stepVal:  {minWidth:56,textAlign:'center',fontSize:13,fontWeight:700,cursor:'pointer',padding:'0 4px',whiteSpace:'nowrap'},
   editBtn:  {width:28,height:28,borderRadius:8,background:'#f0f9ff',border:'1px solid #bae6fd',color:'#0369a1',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1'},
   delBtn:   {width:28,height:28,borderRadius:8,background:'#f9fafb',border:'1px solid #e5e7eb',color:'#9ca3af',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1'},
   // Inline edit row
@@ -258,6 +261,21 @@ const S: Record<string,CSSProperties> = {
 }
 
 // ── Item Card with inline edit ────────────────────────────────
+// ── Mengen-Helfer: teilt "2 Liter" in {amount:2, unit:"Liter"} ──
+const UNITS = ['Stück','kg','g','Liter','ml','Pack','Dose','Bund','Glas']
+function parseQty(qty: string): { amount: number; unit: string } {
+  const m = qty.trim().match(/^([\d.,]+)\s*(.*)$/)
+  if (m) {
+    const amount = parseFloat(m[1].replace(',', '.')) || 1
+    return { amount, unit: m[2].trim() }
+  }
+  return { amount: 1, unit: qty.trim() }
+}
+function buildQty(amount: number, unit: string): string {
+  const a = amount % 1 === 0 ? String(amount) : amount.toFixed(1)
+  return unit ? `${a} ${unit}` : a
+}
+
 function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
   item: Item; roomCode: string; userName: string
   onDelete: ()=>void; onMsg: (t:string)=>void
@@ -265,18 +283,37 @@ function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
   const cfg = CATS[item.category] ?? CATS.sonstiges
   const [expanded,  setExpanded]  = useState(false)
   const [editName,  setEditName]  = useState(item.name)
-  const [editQty,   setEditQty]   = useState(item.qty)
   const [saving,    setSaving]    = useState(false)
+
+  const parsed = parseQty(item.qty)
+  const amount = parsed.amount
+  const unit   = parsed.unit
 
   const handleToggle = async () => {
     await fbToggle(roomCode, item.id, !item.done, userName)
+  }
+
+  // Menge um ±1 ändern (direkt gespeichert)
+  const changeAmount = async (delta: number) => {
+    const next = Math.max(1, Math.round((amount + delta) * 10) / 10)
+    try { await fbUpdateItem(roomCode, item.id, { qty: buildQty(next, unit) }) }
+    catch { onMsg('Fehler') }
+  }
+
+  // Einheit per Klick setzen (direkt gespeichert)
+  const setUnit = async (newUnit: string) => {
+    const finalUnit = newUnit === unit ? '' : newUnit  // nochmal klicken = Einheit entfernen
+    try {
+      await fbUpdateItem(roomCode, item.id, { qty: buildQty(amount, finalUnit) })
+      onMsg(finalUnit ? `Einheit → ${finalUnit}` : 'Einheit entfernt')
+    } catch { onMsg('Fehler') }
   }
 
   const handleSaveEdit = async () => {
     if (!editName.trim()) return
     setSaving(true)
     try {
-      await fbUpdateItem(roomCode, item.id, { name: editName.trim(), qty: editQty || '1' })
+      await fbUpdateItem(roomCode, item.id, { name: editName.trim() })
       setExpanded(false)
       onMsg('✅ Gespeichert')
     } catch { onMsg('Fehler beim Speichern') }
@@ -310,22 +347,18 @@ function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
         </div>
 
         <div style={S.iRight}>
-          {/* Menge Badge – klickbar zum Bearbeiten */}
-          <span
-            style={{ ...S.qtyBadge, borderColor:cfg.color, color:cfg.color }}
-            onClick={() => setExpanded(v => !v)}
-            title="Menge / Kategorie bearbeiten"
-          >
-            {item.qty}
-          </span>
-          {/* Edit Button */}
-          <button
-            style={S.editBtn}
-            onClick={() => { setEditName(item.name); setEditQty(item.qty); setExpanded(v=>!v) }}
-            title="Bearbeiten"
-          >
-            ✏️
-          </button>
+          {/* Mengen-Stepper direkt in der Zeile */}
+          <div style={S.stepper}>
+            <button style={S.stepBtn} onClick={() => changeAmount(-1)} title="Weniger">−</button>
+            <span
+              style={{ ...S.stepVal, color:cfg.color }}
+              onClick={() => setExpanded(v => !v)}
+              title="Einheit ändern"
+            >
+              {item.qty}
+            </span>
+            <button style={S.stepBtn} onClick={() => changeAmount(1)} title="Mehr">+</button>
+          </div>
           <button style={S.delBtn} onClick={onDelete} title="Löschen">×</button>
         </div>
       </div>
@@ -333,7 +366,30 @@ function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
       {/* ── Expanded edit panel ── */}
       {expanded && (
         <div style={S.iExpand}>
-          {/* Name + Menge bearbeiten */}
+          {/* Einheit per Klick */}
+          <div style={S.catLabel}>Einheit wählen:</div>
+          <div style={S.catGrid}>
+            {UNITS.map(u => {
+              const isActive = u === unit
+              return (
+                <button
+                  key={u}
+                  style={{
+                    ...S.catPill,
+                    borderColor: isActive ? cfg.color : '#e5e7eb',
+                    background:  isActive ? cfg.bg    : '#fff',
+                    color:       isActive ? cfg.color : '#374151',
+                  }}
+                  onClick={() => setUnit(u)}
+                >
+                  {u}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Name bearbeiten */}
+          <div style={S.catLabel}>Name ändern:</div>
           <div style={S.editRow}>
             <input
               style={S.editInp}
@@ -341,13 +397,6 @@ function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
               onChange={(e:ChangeEvent<HTMLInputElement>) => setEditName(e.target.value)}
               onKeyDown={(e:KeyboardEvent<HTMLInputElement>) => e.key==='Enter' && handleSaveEdit()}
               placeholder="Artikelname"
-            />
-            <input
-              style={S.editQty}
-              value={editQty}
-              onChange={(e:ChangeEvent<HTMLInputElement>) => setEditQty(e.target.value)}
-              onKeyDown={(e:KeyboardEvent<HTMLInputElement>) => e.key==='Enter' && handleSaveEdit()}
-              placeholder="Menge"
             />
             <button style={S.editSave} onClick={handleSaveEdit} disabled={saving}>
               {saving ? '⏳' : '✓'}
