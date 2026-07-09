@@ -169,6 +169,7 @@ const S: Record<string,CSSProperties> = {
   divTxt:   {position:'relative',top:-11,background:'#fff',padding:'0 12px',color:'#9ca3af',fontSize:13},
   ftRow:    {display:'flex',flexWrap:'wrap',gap:8,justifyContent:'center',marginTop:8},
   ftTag:    {background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:20,padding:'5px 12px',fontSize:12,fontWeight:600},
+  inviteBox:{background:'#eff6ff',color:'#1e40af',border:'1px solid #bfdbfe',borderRadius:10,padding:'12px 14px',fontSize:13,lineHeight:1.5},
   wrap:     {minHeight:'100vh',display:'flex',flexDirection:'column',maxWidth:700,margin:'0 auto',background:'#f9fafb'},
   toast:    {position:'fixed',top:18,left:'50%',transform:'translateX(-50%)',background:'#111827',color:'#fff',padding:'10px 22px',borderRadius:100,fontSize:14,fontWeight:600,zIndex:999,whiteSpace:'nowrap',boxShadow:'0 4px 20px rgba(0,0,0,.25)',animation:'mtSlide .2s ease',pointerEvents:'none'},
   hdr:      {background:'#fff',borderBottom:'1px solid #e5e7eb',padding:'12px 14px',position:'sticky',top:0,zIndex:10,boxShadow:'0 1px 4px rgba(0,0,0,.06)'},
@@ -662,21 +663,31 @@ function HistoryScreen({ session, onBack, onLoad }: { session:Session; onBack:()
 }
 
 // ── HomeScreen ────────────────────────────────────────────────
-function HomeScreen({ onEnter }:{ onEnter:(s:Session)=>void }) {
-  const [name,setName]=useState(''); const [join,setJoin]=useState(''); const [err,setErr]=useState(''); const [busy,setBusy]=useState(false)
+function HomeScreen({ onEnter, initialCode }:{ onEnter:(s:Session)=>void; initialCode?:string }) {
+  const [name,setName]=useState(''); const [join,setJoin]=useState(initialCode||''); const [err,setErr]=useState(''); const [busy,setBusy]=useState(false)
   const create=async()=>{ if(!name.trim()){setErr('Bitte gib deinen Namen ein.');return} setBusy(true);setErr(''); try{const code=await createRoom();onEnter({code,name:name.trim(),color:rndColor()})}catch(e){setErr('Fehler:\n'+(e as Error).message)}finally{setBusy(false)} }
   const doJoin=async()=>{ const code=join.trim().toUpperCase(); if(!name.trim()){setErr('Bitte gib deinen Namen ein.');return} if(code.length<4){setErr('Ungültiger Code.');return} setBusy(true);setErr(''); try{await joinRoom(code);onEnter({code,name:name.trim(),color:rndColor()})}catch(e){setErr((e as Error).message)}finally{setBusy(false)} }
   return (
     <div style={S.bg}><div style={S.card}>
       <div style={S.logoRow}><div style={S.logoBox}>🛒</div><div><div style={S.logoH}>Markttasche</div><div style={S.logoS}>Gemeinsam einkaufen</div></div></div>
+      {initialCode && (
+        <div style={S.inviteBox}>
+          🔗 Du wurdest zu Raum <b>{initialCode}</b> eingeladen. Gib nur noch deinen Namen ein und tritt bei.
+        </div>
+      )}
       <label style={S.lbl}>Dein Name</label>
-      <input style={S.inp} placeholder="z.B. Maria" value={name} onChange={(e:ChangeEvent<HTMLInputElement>)=>{setName(e.target.value);setErr('')}} onKeyDown={(e:KeyboardEvent<HTMLInputElement>)=>e.key==='Enter'&&create()} />
+      <input style={S.inp} placeholder="z.B. Maria" value={name} autoFocus onChange={(e:ChangeEvent<HTMLInputElement>)=>{setName(e.target.value);setErr('')}} onKeyDown={(e:KeyboardEvent<HTMLInputElement>)=>e.key==='Enter'&&(initialCode?doJoin():create())} />
       {err&&<div style={S.err}>{err}</div>}
-      <button style={S.btnG} onClick={create} disabled={busy}>{busy?'⏳ Verbinde…':'✨ Neuen Raum erstellen'}</button>
+      {initialCode ? (
+        <button style={S.btnG} onClick={doJoin} disabled={busy}>{busy?'⏳ Trete bei…':`🔗 Raum ${initialCode} beitreten`}</button>
+      ) : (
+        <button style={S.btnG} onClick={create} disabled={busy}>{busy?'⏳ Verbinde…':'✨ Neuen Raum erstellen'}</button>
+      )}
       <div style={S.divWrap}><span style={S.divTxt}>oder</span></div>
       <label style={S.lbl}>Raum-Code eingeben</label>
       <input style={{...S.inp,letterSpacing:'0.15em',fontWeight:700}} placeholder="z.B. AB12CD" value={join} maxLength={8} onChange={(e:ChangeEvent<HTMLInputElement>)=>{setJoin(e.target.value.toUpperCase());setErr('')}} onKeyDown={(e:KeyboardEvent<HTMLInputElement>)=>e.key==='Enter'&&doJoin()} />
       <button style={S.btnB} onClick={doJoin} disabled={busy}>{busy?'⏳ Suche…':'🔗 Raum beitreten'}</button>
+      {!initialCode && <button style={{...S.btnB,marginTop:2}} onClick={create} disabled={busy}>✨ Neuen Raum erstellen</button>}
       <div style={S.ftRow}>{['🔥 Echtzeit-Sync','👥 Mehrere Nutzer','📋 Listen-Vorlagen'].map(f=><span key={f} style={S.ftTag}>{f}</span>)}</div>
     </div></div>
   )
@@ -897,15 +908,24 @@ function AppScreen({ session, onLeave, onHistory }:{ session:Session; onLeave:()
       </div>
 
       <div style={S.shareBar}>
-        <span style={S.shareLbl}>Code teilen:</span>
         <span style={S.shareCode}>{rc}</span>
-        <button style={S.cpyBtn} onClick={()=>{navigator.clipboard?.writeText(rc);msg('Code kopiert!')}}>📋 Kopieren</button>
+        <button style={S.cpyBtn} onClick={()=>{navigator.clipboard?.writeText(rc);msg('Code kopiert!')}}>📋 Code</button>
+        <button style={{...S.cpyBtn,background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0'}} onClick={()=>{
+          const link=`${window.location.origin}${window.location.pathname}#${rc}`
+          navigator.clipboard?.writeText(link); msg('🔗 Link kopiert!')
+        }}>🔗 Link</button>
       </div>
     </div>
   )
 }
 
 // ── Root ──────────────────────────────────────────────────────
+// Raum-Code aus URL lesen, z.B. markttasche.vercel.app/#SJ7K2P
+function getCodeFromURL(): string {
+  const h = window.location.hash.replace('#','').trim().toUpperCase()
+  return /^[A-Z0-9]{4,8}$/.test(h) ? h : ''
+}
+
 export default function App() {
   // Session aus localStorage wiederherstellen (bleibt nach Neuladen erhalten)
   const [session,setSession]=useState<Session|null>(()=>{
@@ -917,22 +937,47 @@ export default function App() {
   const [screen,setScreen]=useState<Screen>(()=>{
     try { return localStorage.getItem('mt_session') ? 'app' : 'home' } catch { return 'home' }
   })
+  // Raum-Code aus der URL (Einladungslink)
+  const [urlCode,setUrlCode]=useState<string>(()=>getCodeFromURL())
+
+  // Falls ein Einladungs-Link geöffnet wird, während man schon in einem anderen
+  // Raum ist: Startseite mit vorausgefülltem Code zeigen
+  useEffect(()=>{
+    const onHash=()=>{
+      const code=getCodeFromURL()
+      setUrlCode(code)
+      if(code && (!session || session.code!==code)){ setScreen('home') }
+    }
+    window.addEventListener('hashchange', onHash)
+    return ()=>window.removeEventListener('hashchange', onHash)
+  },[session])
 
   const enter=(s:Session)=>{
     try { localStorage.setItem('mt_session', JSON.stringify(s)) } catch {}
+    // URL auf den Raum-Code setzen, damit der Link teilbar ist
+    try { window.location.hash = s.code } catch {}
     setSession(s); setScreen('app')
   }
   const leave=()=>{
     try { localStorage.removeItem('mt_session') } catch {}
-    setSession(null); setScreen('home')
+    try { history.replaceState(null,'',window.location.pathname) } catch {}
+    setUrlCode(''); setSession(null); setScreen('home')
   }
   const handleLoad=async(list:SavedList)=>{
     if(!session) return
     try{await fbLoadTemplate(session.code,list,session.name,session.color);setScreen('app')}catch(e){console.error(e)}
   }
+
+  // Wenn man schon eingeloggt ist und die URL passt: URL-Hash synchron halten
+  useEffect(()=>{
+    if(session && screen==='app'){
+      try { if(window.location.hash.replace('#','')!==session.code) window.location.hash=session.code } catch {}
+    }
+  },[session,screen])
+
   return <>
     <GlobalStyle/>
-    {screen==='home'&&<HomeScreen onEnter={enter}/>}
+    {screen==='home'&&<HomeScreen onEnter={enter} initialCode={urlCode||undefined}/>}
     {screen==='app'&&session&&<AppScreen session={session} onLeave={leave} onHistory={()=>setScreen('history')}/>}
     {screen==='history'&&session&&<HistoryScreen session={session} onBack={()=>setScreen('app')} onLoad={handleLoad}/>}
   </>
