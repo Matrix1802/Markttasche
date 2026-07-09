@@ -268,6 +268,7 @@ const S: Record<string,CSSProperties> = {
   editItemCat:  {width:24,height:24,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0},
   editItemName: {flex:1,fontSize:13,fontWeight:600,color:'#111827',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},
   editItemQty:  {border:'1.5px solid',borderRadius:6,padding:'1px 7px',fontSize:12,fontWeight:700,whiteSpace:'nowrap',flexShrink:0},
+  editItemQtyInp:{width:64,border:'1.5px solid',borderRadius:6,padding:'3px 6px',fontSize:12,fontWeight:700,textAlign:'center',outline:'none',background:'#fff',flexShrink:0},
   editCatSelect:{border:'1px solid #e5e7eb',borderRadius:6,padding:'3px 4px',fontSize:11,color:'#374151',background:'#fff',maxWidth:70,flexShrink:0},
   editItemDel:  {width:24,height:24,borderRadius:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1',flexShrink:0},
   editAddRow:   {display:'flex',gap:6,marginTop:2},
@@ -527,6 +528,9 @@ function SavedListCard({ list, onDelete, onLoad, onMsg }: {
   const changeCat = (idx:number, cat:CatKey) =>
     setItems(prev => prev.map((it,i) => i===idx ? {...it, category:cat} : it))
 
+  const changeQty = (idx:number, qty:string) =>
+    setItems(prev => prev.map((it,i) => i===idx ? {...it, qty} : it))
+
   const save = async () => {
     if (!title.trim()) { onMsg('Titel fehlt'); return }
     setSaving(true)
@@ -577,7 +581,13 @@ function SavedListCard({ list, onDelete, onLoad, onMsg }: {
             <div key={idx} style={S.editItemRow}>
               <span style={{...S.editItemCat, background:cfg.bg, color:cfg.color}}>{cfg.emoji}</span>
               <span style={S.editItemName}>{item.name}</span>
-              <span style={{...S.editItemQty, color:cfg.color, borderColor:cfg.color}}>{item.qty}</span>
+              <input
+                style={{...S.editItemQtyInp, color:cfg.color, borderColor:cfg.color}}
+                value={item.qty}
+                onChange={(e:ChangeEvent<HTMLInputElement>)=>changeQty(idx, e.target.value)}
+                placeholder="Menge"
+                title="Menge ändern"
+              />
               <select
                 style={S.editCatSelect}
                 value={item.category}
