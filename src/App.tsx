@@ -111,6 +111,8 @@ const fbDelete     = (rc:string, id:string) => deleteDoc(doc(db,'rooms',rc,'item
 const fbClearDone  = (rc:string, items:Item[]) => Promise.all(items.filter(i=>i.done).map(i=>deleteDoc(doc(db,'rooms',rc,'items',i.id))))
 const fbUpdateItem = (rc:string, id:string, fields:Partial<Item>) => updateDoc(doc(db,'rooms',rc,'items',id), fields)
 const fbDelSaved   = (_rc:string, id:string) => deleteDoc(doc(db,'saved_lists',id))
+const fbUpdateSaved = (id:string, fields:{title?:string; items?:SavedItem[]; item_count?:number}) =>
+  updateDoc(doc(db,'saved_lists',id), fields)
 
 async function fbSaveList(rc:string, items:Item[], title:string, date:string) {
   // In globale Sammlung speichern, Raum-Code nur als Info mitspeichern
@@ -259,6 +261,18 @@ const S: Record<string,CSSProperties> = {
   lBtns:    {display:'flex',gap:8},
   lBtnLoad: {flex:1,padding:'9px',background:'linear-gradient(135deg,#1d4ed8,#1e40af)',color:'#fff',border:'none',borderRadius:10,fontSize:13,fontWeight:700},
   lBtnDel:  {padding:'9px 12px',background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',borderRadius:10,fontSize:13,fontWeight:600},
+  lBtnEdit: {padding:'9px 12px',background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe',borderRadius:10,fontSize:13,fontWeight:600,whiteSpace:'nowrap'},
+  editTitleInp: {width:'100%',padding:'10px 12px',borderRadius:10,border:'2px solid #bfdbfe',fontSize:15,fontWeight:700,color:'#111827',outline:'none'},
+  editItemRow:  {display:'flex',alignItems:'center',gap:6,background:'#f9fafb',borderRadius:8,padding:'6px 8px'},
+  editItemCat:  {width:24,height:24,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,flexShrink:0},
+  editItemName: {flex:1,fontSize:13,fontWeight:600,color:'#111827',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},
+  editItemQty:  {border:'1.5px solid',borderRadius:6,padding:'1px 7px',fontSize:12,fontWeight:700,whiteSpace:'nowrap',flexShrink:0},
+  editCatSelect:{border:'1px solid #e5e7eb',borderRadius:6,padding:'3px 4px',fontSize:11,color:'#374151',background:'#fff',maxWidth:70,flexShrink:0},
+  editItemDel:  {width:24,height:24,borderRadius:6,background:'#fef2f2',border:'1px solid #fecaca',color:'#dc2626',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1',flexShrink:0},
+  editAddRow:   {display:'flex',gap:6,marginTop:2},
+  editAddName:  {flex:1,padding:'8px 10px',borderRadius:8,border:'2px solid #e5e7eb',fontSize:13,color:'#111827',minWidth:0,outline:'none'},
+  editAddQty:   {width:60,padding:'8px 6px',borderRadius:8,border:'2px solid #e5e7eb',fontSize:12,color:'#111827',textAlign:'center',outline:'none'},
+  editAddBtn:   {width:36,height:36,borderRadius:8,background:'linear-gradient(135deg,#16a34a,#15803d)',color:'#fff',border:'none',fontSize:20,fontWeight:700,flexShrink:0},
   preview:  {display:'flex',flexWrap:'wrap',gap:6},
   prevItem: {background:'#f9fafb',border:'1px solid #e5e7eb',borderRadius:8,padding:'3px 10px',fontSize:12,color:'#374151'},
 }
@@ -458,6 +472,128 @@ function SaveModal({ count, onSave, onClose }: { count:number; onSave:(t:string,
   )
 }
 
+// ── Saved List Card (mit Bearbeiten) ─────────────────────────
+function SavedListCard({ list, onDelete, onLoad, onMsg }: {
+  list: SavedList
+  onDelete: ()=>void
+  onLoad: ()=>void
+  onMsg: (t:string)=>void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [title, setTitle]     = useState(list.title)
+  const [items, setItems]     = useState<SavedItem[]>(list.items)
+  const [newName, setNewName] = useState('')
+  const [newQty,  setNewQty]  = useState('1')
+  const [saving,  setSaving]  = useState(false)
+
+  const removeItem = (idx:number) => setItems(prev => prev.filter((_,i) => i !== idx))
+
+  const addItem = () => {
+    const name = newName.trim()
+    if (!name) return
+    const category = catLocal(name)
+    setItems(prev => [...prev, { name, qty: newQty || '1', category }])
+    setNewName(''); setNewQty('1')
+  }
+
+  const changeCat = (idx:number, cat:CatKey) =>
+    setItems(prev => prev.map((it,i) => i===idx ? {...it, category:cat} : it))
+
+  const save = async () => {
+    if (!title.trim()) { onMsg('Titel fehlt'); return }
+    setSaving(true)
+    try {
+      await fbUpdateSaved(list.id, { title: title.trim(), items, item_count: items.length })
+      setEditing(false)
+      onMsg('✅ Vorlage aktualisiert')
+    } catch { onMsg('Fehler beim Speichern') }
+    finally { setSaving(false) }
+  }
+
+  const cancel = () => {
+    setTitle(list.title); setItems(list.items); setEditing(false)
+  }
+
+  if (!editing) {
+    return (
+      <div style={S.lCard}>
+        <div><div style={S.lTitle}>{list.title}</div><div style={S.lDate}>📅 {formatDate(list.date)} · {list.item_count} Artikel</div></div>
+        <div style={S.preview}>
+          {list.items.slice(0,8).map((item,i)=><div key={i} style={S.prevItem}>{CATS[item.category]?.emoji} {item.name} ({item.qty})</div>)}
+          {list.items.length>8&&<div style={{...S.prevItem,color:'#6b7280'}}>+{list.items.length-8} weitere</div>}
+        </div>
+        <div style={S.lBtns}>
+          <button style={S.lBtnDel} onClick={onDelete}>🗑</button>
+          <button style={S.lBtnEdit} onClick={()=>setEditing(true)}>✏️ Bearbeiten</button>
+          <button style={S.lBtnLoad} onClick={onLoad}>📥 Laden</button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Edit-Modus ──
+  return (
+    <div style={{...S.lCard, border:'2px solid #1d4ed8'}}>
+      <input
+        style={S.editTitleInp}
+        value={title}
+        onChange={(e:ChangeEvent<HTMLInputElement>)=>setTitle(e.target.value)}
+        placeholder="Titel der Vorlage"
+      />
+
+      {/* Artikel bearbeiten */}
+      <div style={{display:'flex',flexDirection:'column',gap:6}}>
+        {items.map((item,idx)=>{
+          const cfg = CATS[item.category] ?? CATS.sonstiges
+          return (
+            <div key={idx} style={S.editItemRow}>
+              <span style={{...S.editItemCat, background:cfg.bg, color:cfg.color}}>{cfg.emoji}</span>
+              <span style={S.editItemName}>{item.name}</span>
+              <span style={{...S.editItemQty, color:cfg.color, borderColor:cfg.color}}>{item.qty}</span>
+              <select
+                style={S.editCatSelect}
+                value={item.category}
+                onChange={(e)=>changeCat(idx, e.target.value as CatKey)}
+                title="Kategorie ändern"
+              >
+                {CAT_KEYS.map(k=><option key={k} value={k}>{CATS[k].emoji} {CATS[k].label}</option>)}
+              </select>
+              <button style={S.editItemDel} onClick={()=>removeItem(idx)}>×</button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Neuen Artikel hinzufügen */}
+      <div style={S.editAddRow}>
+        <input
+          style={S.editAddName}
+          value={newName}
+          onChange={(e:ChangeEvent<HTMLInputElement>)=>setNewName(e.target.value)}
+          onKeyDown={(e:KeyboardEvent<HTMLInputElement>)=>e.key==='Enter'&&addItem()}
+          placeholder="Artikel hinzufügen…"
+        />
+        <input
+          style={S.editAddQty}
+          value={newQty}
+          onChange={(e:ChangeEvent<HTMLInputElement>)=>setNewQty(e.target.value)}
+          onKeyDown={(e:KeyboardEvent<HTMLInputElement>)=>e.key==='Enter'&&addItem()}
+          placeholder="Menge"
+        />
+        <button style={S.editAddBtn} onClick={addItem}>+</button>
+      </div>
+
+      {/* Speichern / Abbrechen */}
+      <div style={S.lBtns}>
+        <button style={S.mBtnCancel} onClick={cancel}>Abbrechen</button>
+        <button style={{...S.lBtnLoad, flex:1}} onClick={save} disabled={saving}>
+          {saving ? '⏳ …' : '💾 Speichern'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── History Screen ────────────────────────────────────────────
 function HistoryScreen({ session, onBack, onLoad }: { session:Session; onBack:()=>void; onLoad:(l:SavedList)=>void }) {
   const [lists,setLists]=useState<SavedList[]>([]); const [loading,setLoading]=useState(true); const [toast,setToast]=useState('')
@@ -472,19 +608,15 @@ function HistoryScreen({ session, onBack, onLoad }: { session:Session; onBack:()
       </div>
       <div style={S.histBody}>
         {loading&&<div style={S.spinner}>⏳ Lade Listen…</div>}
-        {!loading&&lists.length===0&&<div style={S.empty}><div style={S.emptyI}>📋</div><div style={S.emptyH}>Noch keine Listen gespeichert</div><div style={{fontSize:14,color:'#9ca3af'}}>In der Einkaufsliste auf "💾 Liste speichern" klicken.</div></div>}
+        {!loading&&lists.length===0&&<div style={S.empty}><div style={S.emptyI}>📋</div><div style={S.emptyH}>Noch keine Listen gespeichert</div><div style={{fontSize:14,color:'#9ca3af'}}>In der Einkaufsliste auf "📋 Merken" klicken.</div></div>}
         {lists.map(list=>(
-          <div key={list.id} style={S.lCard}>
-            <div><div style={S.lTitle}>{list.title}</div><div style={S.lDate}>📅 {formatDate(list.date)} · {list.item_count} Artikel</div></div>
-            <div style={S.preview}>
-              {list.items.slice(0,8).map((item,i)=><div key={i} style={S.prevItem}>{CATS[item.category]?.emoji} {item.name} ({item.qty})</div>)}
-              {list.items.length>8&&<div style={{...S.prevItem,color:'#6b7280'}}>+{list.items.length-8} weitere</div>}
-            </div>
-            <div style={S.lBtns}>
-              <button style={S.lBtnDel} onClick={async()=>{await fbDelSaved(session.code,list.id);msg('Vorlage gelöscht')}}>🗑 Löschen</button>
-              <button style={S.lBtnLoad} onClick={()=>onLoad(list)}>📥 Als neue Liste laden</button>
-            </div>
-          </div>
+          <SavedListCard
+            key={list.id}
+            list={list}
+            onDelete={async()=>{await fbDelSaved(session.code,list.id);msg('Vorlage gelöscht')}}
+            onLoad={()=>onLoad(list)}
+            onMsg={msg}
+          />
         ))}
       </div>
     </div>
