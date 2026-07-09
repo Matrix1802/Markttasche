@@ -226,7 +226,8 @@ const S: Record<string,CSSProperties> = {
   qtyBadge: {border:'1.5px solid',borderRadius:8,padding:'2px 10px',fontSize:13,fontWeight:700,minWidth:32,textAlign:'center',cursor:'pointer'},
   stepper:  {display:'flex',alignItems:'center',gap:2,background:'#f9fafb',border:'1px solid #e5e7eb',borderRadius:10,padding:2},
   stepBtn:  {width:26,height:26,borderRadius:7,background:'#fff',border:'1px solid #e5e7eb',color:'#374151',fontSize:17,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1',flexShrink:0},
-  stepVal:  {minWidth:56,textAlign:'center',fontSize:13,fontWeight:700,cursor:'pointer',padding:'0 4px',whiteSpace:'nowrap'},
+  stepInput:{width:34,textAlign:'center',fontSize:13,fontWeight:700,padding:'0 2px',border:'none',background:'transparent',outline:'none'},
+  stepUnit: {fontSize:12,fontWeight:700,cursor:'pointer',padding:'0 4px 0 0',whiteSpace:'nowrap'},
   editBtn:  {width:28,height:28,borderRadius:8,background:'#f0f9ff',border:'1px solid #bae6fd',color:'#0369a1',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1'},
   delBtn:   {width:28,height:28,borderRadius:8,background:'#f9fafb',border:'1px solid #e5e7eb',color:'#9ca3af',fontSize:20,display:'flex',alignItems:'center',justifyContent:'center',lineHeight:'1'},
   // Inline edit row
@@ -306,6 +307,11 @@ function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
   const amount = parsed.amount
   const unit   = parsed.unit
 
+  // Lokaler Zustand für die Tastatureingabe der Menge
+  const [amountInput, setAmountInput] = useState(String(amount))
+  // Wenn sich die Menge extern ändert (anderes Gerät), Eingabefeld angleichen
+  useEffect(() => { setAmountInput(String(parseQty(item.qty).amount)) }, [item.qty])
+
   const handleToggle = async () => {
     await fbToggle(roomCode, item.id, !item.done, userName)
   }
@@ -315,6 +321,17 @@ function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
     const next = Math.max(1, Math.round((amount + delta) * 10) / 10)
     try { await fbUpdateItem(roomCode, item.id, { qty: buildQty(next, unit) }) }
     catch { onMsg('Fehler') }
+  }
+
+  // Menge per Tastatur eingegeben → speichern
+  const commitAmount = async () => {
+    const raw = amountInput.replace(',', '.').trim()
+    const num = parseFloat(raw)
+    if (isNaN(num) || num < 0) { setAmountInput(String(amount)); return }  // ungültig → zurücksetzen
+    const clean = Math.round(num * 10) / 10
+    if (clean === amount) return  // keine Änderung
+    try { await fbUpdateItem(roomCode, item.id, { qty: buildQty(clean, unit) }) }
+    catch { onMsg('Fehler'); setAmountInput(String(amount)) }
   }
 
   // Einheit per Klick setzen (direkt gespeichert)
@@ -364,16 +381,27 @@ function ItemCard({ item, roomCode, userName, onDelete, onMsg }: {
         </div>
 
         <div style={S.iRight}>
-          {/* Mengen-Stepper direkt in der Zeile */}
+          {/* Mengen-Stepper mit Tastatureingabe */}
           <div style={S.stepper}>
             <button style={S.stepBtn} onClick={() => changeAmount(-1)} title="Weniger">−</button>
-            <span
-              style={{ ...S.stepVal, color:cfg.color }}
-              onClick={() => setExpanded(v => !v)}
-              title="Einheit ändern"
-            >
-              {item.qty}
-            </span>
+            <input
+              style={{ ...S.stepInput, color:cfg.color }}
+              value={amountInput}
+              onChange={(e:ChangeEvent<HTMLInputElement>) => setAmountInput(e.target.value)}
+              onBlur={commitAmount}
+              onKeyDown={(e:KeyboardEvent<HTMLInputElement>) => { if(e.key==='Enter'){ (e.target as HTMLInputElement).blur() } }}
+              inputMode="decimal"
+              title="Menge eingeben"
+            />
+            {unit && (
+              <span
+                style={{ ...S.stepUnit, color:cfg.color }}
+                onClick={() => setExpanded(v => !v)}
+                title="Einheit ändern"
+              >
+                {unit}
+              </span>
+            )}
             <button style={S.stepBtn} onClick={() => changeAmount(1)} title="Mehr">+</button>
           </div>
           <button style={S.delBtn} onClick={onDelete} title="Löschen">×</button>
